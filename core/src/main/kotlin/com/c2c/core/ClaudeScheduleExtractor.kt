@@ -21,15 +21,22 @@ import kotlin.jvm.optionals.getOrNull
 class ClaudeScheduleExtractor(
     private val client: AnthropicClient,
     private val model: String = DEFAULT_MODEL,
+    /** 프롬프트에 함께 보낼 과거 삭제 기록 (개선 피드백). [FeedbackExamples.select] 로 고른 것. */
+    private val pastMistakes: List<DeletionFeedback> = emptyList(),
 ) : ScheduleExtractor {
 
     companion object {
         const val DEFAULT_MODEL = "claude-opus-5-5"
         private const val FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
-        fun create(apiKey: String, model: String = DEFAULT_MODEL) = ClaudeScheduleExtractor(
+        fun create(
+            apiKey: String,
+            pastMistakes: List<DeletionFeedback> = emptyList(),
+            model: String = DEFAULT_MODEL,
+        ) = ClaudeScheduleExtractor(
             AnthropicOkHttpClient.builder().apiKey(apiKey).build(),
             model,
+            pastMistakes,
         )
     }
 
@@ -56,7 +63,7 @@ class ClaudeScheduleExtractor(
                     )
                     .build(),
             )
-            .addUserMessage(ExtractionPrompt.userMessage(transcript, context))
+            .addUserMessage(ExtractionPrompt.userMessage(transcript, context, pastMistakes))
             .build()
 
         val message = client.beta().messages().create(params)

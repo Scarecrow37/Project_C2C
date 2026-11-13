@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -32,6 +33,7 @@ fun AppRoot(openEventId: Long?, onOpenEventConsumed: () -> Unit) {
         mutableIntStateOf(if (AppSettings(context).apiKey.isBlank()) TAB_SETTINGS else TAB_EVENTS)
     }
     val snackbar = remember { SnackbarHostState() }
+    var showFeedback by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(openEventId) { if (openEventId != null) tab = TAB_EVENTS }
 
@@ -54,7 +56,11 @@ fun AppRoot(openEventId: Long?, onOpenEventConsumed: () -> Unit) {
                     onOpenEventConsumed = onOpenEventConsumed,
                     onGoToSettings = { tab = TAB_SETTINGS },
                 )
-                else -> SettingsScreen()
+                else -> if (showFeedback) {
+                    FeedbackScreen(snackbar = snackbar, onBack = { showFeedback = false })
+                } else {
+                    SettingsScreen(onOpenFeedback = { showFeedback = true })
+                }
             }
         }
     }

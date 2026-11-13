@@ -14,6 +14,9 @@ import com.c2c.app.calendar.CalendarRepository
 import com.c2c.app.calendar.StoredEvent
 import com.c2c.app.data.CreatedEvent
 import com.c2c.app.data.CreatedEventStore
+import com.c2c.app.data.FeedbackStore
+import com.c2c.core.DeletionReason
+import com.c2c.core.DeletionSource
 import com.c2c.core.EventDraft
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,8 +43,12 @@ sealed interface EventsState {
     data class Loaded(val items: List<EventItem>) : EventsState
 }
 
+/** 방금 삭제한 일정의 이유를 물어보는 카드. */
+data class ReasonRequest(val feedbackId: String, val title: String)
+
 sealed interface EventsMessage {
-    data class Deleted(val item: EventItem) : EventsMessage
+    /** @param feedbackId 삭제 기록 ID. 되돌리면 기록도 지운다. */
+    data class Deleted(val item: EventItem, val feedbackId: String) : EventsMessage
     data class Text(val text: String) : EventsMessage
 }
 
@@ -52,6 +59,11 @@ sealed interface EventsMessage {
 class EventsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val store = CreatedEventStore(app)
+    private val feedback = FeedbackStore(app)
+
+    private val _reasonRequest = MutableStateFlow<ReasonRequest?>(null)
+    /** 목록 위에 보여줄 "삭제 이유" 질문. 고르거나 닫으면 null. */
+    val reasonRequest: StateFlow<ReasonRequest?> = _reasonRequest
     private val repo = CalendarRepository(app)
 
     private val _state = MutableStateFlow<EventsState>(EventsState.Loading)
@@ -87,8 +99,11 @@ class EventsViewModel(app: Application) : AndroidViewModel(app) {
             val items = withContext(Dispatchers.IO) {
                 val metas = store.all()
                 val found = metas.mapNotNull { meta -> repo.get(meta.eventId)?.let { EventItem(meta, it) } }
-                // 캘린더 앱에서 삭제된 일정은 목록에서도 정리
-                store.removeAll(metas.map { it.eventId } - found.map { it.id }.toSet())
+                // 캘린더 앱에서 삭제된 일정은 목록에서 정리하고 피드백으로 남긴다
+                val foundIds = found.map { it.id }.toSet()
+                val missing = metas.filter { it.eventId !in foundIds && it.eventId !in pendingDelete.value }
+                missing.forEach { feedback.recordDeletion(it, null, DeletionSource.CALENDAR_APP) }
+                store.removeAll(missing.map { it.eventId })
                 found.sortedBy { it.draft.start }
             }
             _state.value = EventsState.Loaded(items)
@@ -99,11 +114,18 @@ class EventsViewModel(app: Application) : AndroidViewModel(app) {
     fun delete(item: EventItem) {
         pendingDelete.update { it + item.id }
         viewModelScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching { repo.delete(item.id).also { if (it) store.remove(item.id) } }.getOrDefault(false)
+            val feedbackId = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (repo.delete(item.id)) {
+                        feedback.recordDeletion(item.meta, item.draft, DeletionSource.APP).also { store.remove(item.id) }
+                    } else {
+                        null
+                    }
+                }.getOrNull()
             }
-            if (ok) {
-                _messages.send(EventsMessage.Deleted(item))
+            if (feedbackId != null) {
+                _reasonRequest.value = ReasonRequest(feedbackId, item.draft.title)
+                _messages.send(EventsMessage.Deleted(item, feedbackId))
             } else {
                 pendingDelete.update { it - item.id }
                 _messages.send(EventsMessage.Text("삭제하지 못했습니다"))
@@ -111,14 +133,26 @@ class EventsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun undoDelete(item: EventItem) = viewModelScope.launch {
+    fun undoDelete(item: EventItem, feedbackId: String) = viewModelScope.launch {
         val ok = withContext(Dispatchers.IO) {
             runCatching {
                 val newId = repo.insert(item.stored.calendarId, item.draft)
                 store.add(item.meta.copy(eventId = newId))
+                feedback.remove(feedbackId) // 되돌렸으면 잘못 등록된 일정이 아니다
             }.isSuccess
         }
+        if (ok && _reasonRequest.value?.feedbackId == feedbackId) _reasonRequest.value = null
         if (!ok) _messages.send(EventsMessage.Text("일정을 복구하지 못했습니다"))
+    }
+
+    /** 삭제 이유 선택. 다음 일정 추출 때 같은 실수를 피하는 데 쓰인다. */
+    fun setReason(feedbackId: String, reason: DeletionReason) {
+        _reasonRequest.value = null
+        viewModelScope.launch(Dispatchers.IO) { feedback.setReason(feedbackId, reason) }
+    }
+
+    fun dismissReason() {
+        _reasonRequest.value = null
     }
 
     /** 수정 내용을 캘린더에 저장한다. 성공하면 true. */

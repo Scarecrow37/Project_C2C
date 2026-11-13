@@ -35,6 +35,23 @@ The app's **"생성된 일정" (Created events)** tab collects every event creat
 - **Calendar sync**: the device calendar holds the event details. Changes or deletions made in Google Calendar or Samsung Calendar show up in the list right away.
 - Tapping the "Event added" notification opens the app on that event's details.
 
+## Improvement feedback (learning from deleted events)
+
+Deleting an auto-created event usually means it was created by mistake. The app records each deletion as evidence for improving extraction.
+
+- **When it records**: deleting in the app's list or detail screen, tapping **Cancel** on the "Event added" notification, or deleting the event in another calendar app.
+- **What it records**: the event as Claude first extracted it, its confidence, the quote it was based on, the call summary and time, part of the transcript (up to 6,000 characters), and the event as it was just before deletion (including any user edits).
+- **Asks for a reason**: after a delete in the app, a "Why did you delete it?" card appears above the list. Choices: not an event, wrong date/time, wrong details, cancelled later, duplicate, other. The record is kept even if no reason is chosen.
+- **Undo**: undoing a delete means the event was not a mistake, so its record is removed too.
+- **Used in the next extraction**: up to 10 recent records that count as extraction mistakes are sent to Claude with the next extraction request, as "events this user deleted as wrong." This helps it avoid the same mistake in similar calls.
+  - Included: not an event, wrong date/time, wrong details, and deletions with no reason made in the app or from the notification.
+  - Excluded: cancelled, duplicate, other, and deletions with no reason made in another calendar app (these may just be cleanup).
+  - If the user fixed the time before deleting, the fixed time is included as well.
+- **Settings → 6. Improvement feedback**: shows the number of auto-created events, deletions and the mistake rate, with a switch to turn the feature off. **View deletion records** lets you change each record's reason or remove it.
+- **Export as JSON**: an analysis file for tuning the prompt and confidence threshold (format `c2c-deletion-feedback/1`). It contains parts of call transcripts, so take care when sharing it.
+
+Records stay in the app's private storage on the device and are not sent to any server. Only the parts attached as examples to the next extraction request (quote, time, deletion reason) go to the Claude API.
+
 ## Platform limits
 
 | | |
@@ -53,16 +70,17 @@ core/   Pure Kotlin/JVM module: builds and tests without the Android SDK
   EventFilter               Confidence, past-event and duplicate filtering
   EventDraft / CalendarTime Edit validation, calendar time conversion
   EventFormat               Display strings for event times
+  Feedback / FeedbackCodec  Deletion records, prompt example selection, JSON storage and export
   RecordingFileName         Reads contact and call time from Samsung recording file names
 
 app/    Android app (Kotlin, Jetpack Compose, WorkManager)
   recording/  Finds call recordings in MediaStore
   stt/        Audio decoding, whisper.cpp JNI, model download
   calendar/   Adds, reads, edits and deletes calendar events
-  data/       Settings, processing history, created-event list
+  data/       Settings, processing history, created-event list, deletion records
   notify/     Notifications and the cancel action
   work/       Background pipeline
-  ui/         Created-events tab (list, details, edit, swipe to delete), settings tab
+  ui/         Created-events tab (list, details, edit, swipe to delete, delete reason), settings tab (with deletion records screen)
   src/main/cpp/  whisper.cpp JNI bridge
 ```
 
