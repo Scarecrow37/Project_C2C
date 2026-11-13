@@ -172,15 +172,15 @@ fun SettingsScreen(
 
             Section("6. 개선 피드백") {
                 Text(
-                    "자동 등록된 일정을 삭제하면 잘못 등록된 사례로 기록됩니다. 이 기록을 참고해 다음 통화부터 같은 실수를 줄입니다.",
+                    "자동 등록된 일정을 삭제하거나 고치면 기록됩니다. 이 기록을 참고해 다음 통화부터 같은 실수를 줄이고, 고친 방식을 따릅니다.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 StatsText(feedback)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("삭제 기록을 일정 추출에 반영", Modifier.weight(1f))
+                    Text("삭제·수정 기록을 일정 추출에 반영", Modifier.weight(1f))
                     Switch(checked = feedback.useInPrompt, onCheckedChange = feedbackVm::setUseInPrompt)
                 }
-                OutlinedButton(onClick = onOpenFeedback) { Text("삭제 기록 보기") }
+                OutlinedButton(onClick = onOpenFeedback) { Text("피드백 기록 보기") }
             }
 
             Section("최근 처리 기록") {

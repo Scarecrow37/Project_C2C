@@ -127,17 +127,33 @@ object FeedbackExamples {
     }
 }
 
-/** 삭제 기록 통계 (설정 화면 표시용). */
-data class FeedbackStats(val totalCreated: Int, val deleted: Int, val mistakes: Int, val byReason: Map<DeletionReason, Int>) {
-    /** 자동 등록 대비 추출 실수 비율 (0.0~1.0). 등록한 일정이 없으면 null. */
+/** 개선 피드백 통계 (설정 화면 표시용). */
+data class FeedbackStats(
+    val totalCreated: Int,
+    val deleted: Int,
+    val mistakes: Int,
+    val byReason: Map<DeletionReason, Int>,
+    /** 사용자가 고친 일정 수 */
+    val edited: Int = 0,
+    val byField: Map<CorrectedField, Int> = emptyMap(),
+) {
+    /** 자동 등록 대비 추출 실수(잘못 등록) 비율 (0.0~1.0). 등록한 일정이 없으면 null. */
     val mistakeRate: Double? get() = if (totalCreated > 0) mistakes.toDouble() / totalCreated else null
 
+    /** 자동 등록 대비 수정 비율 (0.0~1.0). */
+    val editRate: Double? get() = if (totalCreated > 0) edited.toDouble() / totalCreated else null
+
     companion object {
-        fun of(feedback: List<DeletionFeedback>, totalCreated: Int) = FeedbackStats(
-            totalCreated = maxOf(totalCreated, feedback.size),
-            deleted = feedback.size,
-            mistakes = feedback.count { it.isExtractionMistake },
-            byReason = feedback.groupingBy { it.reason }.eachCount(),
-        )
+        fun of(feedback: List<DeletionFeedback>, totalCreated: Int, edits: List<EditFeedback> = emptyList()): FeedbackStats {
+            val realEdits = edits.filter { it.changes.isNotEmpty() }
+            return FeedbackStats(
+                totalCreated = maxOf(totalCreated, feedback.size + realEdits.size),
+                deleted = feedback.size,
+                mistakes = feedback.count { it.isExtractionMistake },
+                byReason = feedback.groupingBy { it.reason }.eachCount(),
+                edited = realEdits.size,
+                byField = realEdits.flatMap { it.changes }.groupingBy { it }.eachCount(),
+            )
+        }
     }
 }

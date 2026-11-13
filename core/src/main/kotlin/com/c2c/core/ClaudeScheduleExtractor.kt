@@ -23,6 +23,8 @@ class ClaudeScheduleExtractor(
     private val model: String = DEFAULT_MODEL,
     /** 프롬프트에 함께 보낼 과거 삭제 기록 (개선 피드백). [FeedbackExamples.select] 로 고른 것. */
     private val pastMistakes: List<DeletionFeedback> = emptyList(),
+    /** 프롬프트에 함께 보낼 과거 수정 기록 (개선 피드백). [CorrectionExamples.select] 로 고른 것. */
+    private val pastCorrections: List<EditFeedback> = emptyList(),
 ) : ScheduleExtractor {
 
     companion object {
@@ -32,11 +34,13 @@ class ClaudeScheduleExtractor(
         fun create(
             apiKey: String,
             pastMistakes: List<DeletionFeedback> = emptyList(),
+            pastCorrections: List<EditFeedback> = emptyList(),
             model: String = DEFAULT_MODEL,
         ) = ClaudeScheduleExtractor(
             AnthropicOkHttpClient.builder().apiKey(apiKey).build(),
             model,
             pastMistakes,
+            pastCorrections,
         )
     }
 
@@ -63,7 +67,7 @@ class ClaudeScheduleExtractor(
                     )
                     .build(),
             )
-            .addUserMessage(ExtractionPrompt.userMessage(transcript, context, pastMistakes))
+            .addUserMessage(ExtractionPrompt.userMessage(transcript, context, pastMistakes, pastCorrections))
             .build()
 
         val message = client.beta().messages().create(params)

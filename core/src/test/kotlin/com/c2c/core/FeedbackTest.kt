@@ -105,8 +105,8 @@ class FeedbackTest {
         assertEquals(1, stats.mistakes)
         assertEquals(0.1, stats.mistakeRate!!, 1e-9)
 
-        val json = FeedbackCodec.exportJson(list, stats, LocalDateTime.of(2026, 11, 13, 15, 0))
-        assertTrue(json.contains("\"format\" : \"c2c-deletion-feedback/1\""), json)
+        val json = FeedbackCodec.exportJson(list, emptyList(), stats, LocalDateTime.of(2026, 11, 13, 15, 0))
+        assertTrue(json.contains("\"format\" : \"c2c-feedback/2\""), json)
         assertTrue(json.contains("\"NOT_AN_EVENT\" : 1"))
         assertTrue(json.contains("\"transcript\" : \"여보세요 ...\""))
     }

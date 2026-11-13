@@ -17,6 +17,7 @@ import com.c2c.app.data.CreatedEventStore
 import com.c2c.app.data.FeedbackStore
 import com.c2c.core.DeletionReason
 import com.c2c.core.DeletionSource
+import com.c2c.core.EditSource
 import com.c2c.core.EventDraft
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -104,6 +105,8 @@ class EventsViewModel(app: Application) : AndroidViewModel(app) {
                 val missing = metas.filter { it.eventId !in foundIds && it.eventId !in pendingDelete.value }
                 missing.forEach { feedback.recordDeletion(it, null, DeletionSource.CALENDAR_APP) }
                 store.removeAll(missing.map { it.eventId })
+                // 다른 캘린더 앱에서 고친 일정은 수정 기록으로 남긴다 (앱에서 고친 건 이미 기록됨)
+                found.forEach { feedback.recordEdit(it.meta, it.draft, EditSource.CALENDAR_APP) }
                 found.sortedBy { it.draft.start }
             }
             _state.value = EventsState.Loaded(items)
@@ -162,7 +165,14 @@ class EventsViewModel(app: Application) : AndroidViewModel(app) {
             _messages.send(EventsMessage.Text(it))
             return false
         }
-        val ok = withContext(Dispatchers.IO) { runCatching { repo.update(item.id, normalized) }.getOrDefault(false) }
+        val ok = withContext(Dispatchers.IO) {
+            runCatching {
+                repo.update(item.id, normalized).also { updated ->
+                    // 고친 값은 다음 일정 추출 때 "정답" 예시로 쓰인다
+                    if (updated) feedback.recordEdit(item.meta, normalized, EditSource.APP)
+                }
+            }.getOrDefault(false)
+        }
         _messages.send(EventsMessage.Text(if (ok) "일정을 수정했습니다" else "일정을 찾지 못했습니다 (이미 삭제됨)"))
         refresh()
         return ok

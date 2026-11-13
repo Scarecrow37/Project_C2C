@@ -71,10 +71,46 @@ object FeedbackCodec {
         return if (root.isArray) root.mapNotNull(::feedbackFromJson) else emptyList()
     }
 
-    /** 분석용 내보내기 파일 (사람이 읽기 좋게 들여쓰기). */
-    fun exportJson(list: List<DeletionFeedback>, stats: FeedbackStats, exportedAt: LocalDateTime): String {
+    // ---- EditFeedback ----
+
+    fun editToJson(e: EditFeedback): ObjectNode = mapper.createObjectNode().apply {
+        put("eventId", e.eventId)
+        put("editedAt", e.editedAtMillis)
+        put("source", e.source.name)
+        set<JsonNode>("origin", originToJson(e.origin))
+        set<JsonNode>("corrected", draftToJson(e.corrected))
+        set<JsonNode>("changes", mapper.createArrayNode().apply { e.changes.forEach { add(it.name) } })
+    }
+
+    fun editFromJson(n: JsonNode): EditFeedback? {
+        val corrected = n.get("corrected")?.let(::draftFromJson) ?: return null
+        return EditFeedback(
+            eventId = n.path("eventId").asLong(-1),
+            editedAtMillis = n.path("editedAt").asLong(0),
+            source = enumOr(n.text("source"), EditSource.APP),
+            origin = n.get("origin")?.let(::originFromJson) ?: EMPTY_ORIGIN,
+            corrected = corrected,
+        )
+    }
+
+    fun editListToJson(list: List<EditFeedback>): String =
+        mapper.writeValueAsString(mapper.createArrayNode().apply { list.forEach { add(editToJson(it)) } })
+
+    fun editListFromJson(json: String?): List<EditFeedback> {
+        if (json.isNullOrBlank()) return emptyList()
+        val root = runCatching { mapper.readTree(json) }.getOrNull() ?: return emptyList()
+        return if (root.isArray) root.mapNotNull(::editFromJson) else emptyList()
+    }
+
+    /** 분석용 내보내기 파일 (사람이 읽기 좋게 들여쓰기). 삭제 기록과 수정 기록을 함께 담는다. */
+    fun exportJson(
+        deletions: List<DeletionFeedback>,
+        edits: List<EditFeedback>,
+        stats: FeedbackStats,
+        exportedAt: LocalDateTime,
+    ): String {
         val root = mapper.createObjectNode().apply {
-            put("format", "c2c-deletion-feedback/1")
+            put("format", "c2c-feedback/2")
             put("exportedAt", exportedAt.toString())
             set<JsonNode>(
                 "stats",
@@ -82,13 +118,19 @@ object FeedbackCodec {
                     put("totalCreated", stats.totalCreated)
                     put("deleted", stats.deleted)
                     put("extractionMistakes", stats.mistakes)
+                    put("edited", stats.edited)
                     set<JsonNode>(
                         "byReason",
                         mapper.createObjectNode().apply { stats.byReason.forEach { (r, c) -> put(r.name, c) } },
                     )
+                    set<JsonNode>(
+                        "byCorrectedField",
+                        mapper.createObjectNode().apply { stats.byField.forEach { (f, c) -> put(f.name, c) } },
+                    )
                 },
             )
-            set<JsonNode>("feedback", mapper.createArrayNode().apply { list.forEach { add(feedbackToJson(it)) } })
+            set<JsonNode>("deletions", mapper.createArrayNode().apply { deletions.forEach { add(feedbackToJson(it)) } })
+            set<JsonNode>("edits", mapper.createArrayNode().apply { edits.forEach { add(editToJson(it)) } })
         }
         return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root)
     }
