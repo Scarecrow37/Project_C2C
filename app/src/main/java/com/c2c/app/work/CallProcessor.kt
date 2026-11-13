@@ -4,11 +4,14 @@ import android.content.Context
 import android.net.Uri
 import com.c2c.app.calendar.CalendarRepository
 import com.c2c.app.data.AppSettings
+import com.c2c.app.data.CreatedEvent
+import com.c2c.app.data.CreatedEventStore
 import com.c2c.app.data.HistoryEntry
 import com.c2c.app.notify.Notifier
 import com.c2c.app.stt.AudioDecoder
 import com.c2c.app.stt.WhisperTranscriber
 import com.c2c.core.CallContext
+import com.c2c.core.EventDraft
 import com.c2c.core.EventFilter
 import com.c2c.core.ExtractionResult
 import com.c2c.core.RecordingFileName
@@ -33,9 +36,10 @@ class CallProcessor(
     private val transcriber: WhisperTranscriber,
     private val extractor: ScheduleExtractor,
     private val settings: AppSettings = AppSettings(context),
-    private val calendar: CalendarRepository = CalendarRepository(context),
-    private val notifier: Notifier = Notifier(context),
     private val zone: ZoneId = ZoneId.systemDefault(),
+    private val calendar: CalendarRepository = CalendarRepository(context, zone),
+    private val createdEvents: CreatedEventStore = CreatedEventStore(context),
+    private val notifier: Notifier = Notifier(context),
 ) {
 
     /**
@@ -72,7 +76,10 @@ class CallProcessor(
                         event.notes?.let { append("메모: ").append(it).append('\n') }
                         if (event.evidence.isNotBlank()) append("근거: \"").append(event.evidence).append("\"\n")
                     }
-                    val id = calendar.insert(settings.calendarId, event, zone, desc)
+                    val id = calendar.insert(settings.calendarId, EventDraft.from(event, desc))
+                    createdEvents.add(
+                        CreatedEvent(id, System.currentTimeMillis(), parsedName.counterpart, displayName, event.evidence),
+                    )
                     notifier.eventAdded(id, event, parsedName.counterpart)
                     event.title
                 }

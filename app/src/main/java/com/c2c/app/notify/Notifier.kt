@@ -4,11 +4,9 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.provider.CalendarContract
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -36,8 +34,10 @@ class Notifier(private val context: Context) {
     fun eventAdded(eventId: Long, event: ScheduleEvent, counterpart: String?) {
         // 고정 ID(1~3)와 겹치지 않도록 1000 이상으로
         val notificationId = (eventId % 1_000_000).toInt() + 1000
-        val viewIntent = Intent(Intent.ACTION_VIEW)
-            .setData(ContentUris.withAppendedId(CalendarContract.Events.CONTENT_URI, eventId))
+        // 알림을 누르면 앱의 "생성된 일정" 탭에서 해당 일정의 상세 화면을 연다.
+        val viewIntent = Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_EVENT_ID, eventId)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val undoIntent = Intent(context, UndoEventReceiver::class.java)
             .putExtra(UndoEventReceiver.EXTRA_EVENT_ID, eventId)
             .putExtra(UndoEventReceiver.EXTRA_NOTIFICATION_ID, notificationId)

@@ -25,7 +25,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,7 +55,7 @@ private fun requiredPermissions(): Array<String> = buildList {
 }.toTypedArray()
 
 @Composable
-fun MainScreen(vm: MainViewModel = viewModel()) {
+fun SettingsScreen(vm: MainViewModel = viewModel()) {
     val context = LocalContext.current
     val state by vm.state.collectAsState()
     val model by vm.modelState.collectAsState()
@@ -75,11 +74,10 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     }
     LaunchedEffect(permissionsGranted) { if (permissionsGranted) vm.loadCalendars() }
 
-    Scaffold { padding ->
+    run {
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
