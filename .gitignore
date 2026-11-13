@@ -7,7 +7,9 @@ local.properties
 .cxx/
 .externalNativeBuild/
 captures/
-# whisper.cpp 소스는 scripts/fetch_whisper.sh 로 받는다
+# 네이티브 소스는 scripts/fetch_native.sh 로 받는다
 app/src/main/cpp/whisper.cpp/
-# Whisper 모델 파일
+llm/src/main/cpp/llama.cpp/
+# 모델 파일
 *.bin
+*.gguf

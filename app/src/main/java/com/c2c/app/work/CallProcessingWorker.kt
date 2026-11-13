@@ -24,7 +24,12 @@ import com.c2c.app.recording.CallRecording
 import com.c2c.app.recording.CallRecordingScanner
 import com.c2c.app.stt.WhisperModel
 import com.c2c.app.stt.WhisperTranscriber
+import com.c2c.app.model.ExtractionEngine
+import com.c2c.app.model.LazyLlamaGenerator
+import com.c2c.app.model.LocalModels
 import com.c2c.core.ClaudeScheduleExtractor
+import com.c2c.core.LocalLlmScheduleExtractor
+import com.c2c.core.ScheduleExtractor
 import com.c2c.core.CorrectionExamples
 import com.c2c.core.FeedbackExamples
 import kotlinx.coroutines.Dispatchers
@@ -81,7 +86,7 @@ class CallProcessingWorker(context: Context, params: WorkerParameters) : Corouti
             val processor = CallProcessor(
                 applicationContext,
                 transcriber,
-                ClaudeScheduleExtractor.create(settings.apiKey, pastMistakes(), pastCorrections()),
+                createExtractor(),
                 settings,
             )
             for (rec in targets) {
@@ -114,6 +119,19 @@ class CallProcessingWorker(context: Context, params: WorkerParameters) : Corouti
         return Result.success()
     }
 
+    /** 설정에서 고른 엔진으로 일정 추출기를 만든다. 두 엔진 모두 같은 피드백 예시를 받는다. */
+    private fun createExtractor(): ScheduleExtractor = when (settings.extractionEngine) {
+        ExtractionEngine.CLAUDE -> ClaudeScheduleExtractor.create(settings.apiKey, pastMistakes(), pastCorrections())
+        ExtractionEngine.LOCAL -> settings.localModel.let { spec ->
+            LocalLlmScheduleExtractor(
+                LazyLlamaGenerator(LocalModels.file(applicationContext, spec)),
+                spec.id,
+                pastMistakes(),
+                pastCorrections(),
+            )
+        }
+    }
+
     /** 사용자가 잘못 등록됐다며 지운 최근 일정 (켜져 있을 때만). 같은 실수를 반복하지 않도록 프롬프트에 넣는다. */
     private fun pastMistakes() = FeedbackStore(applicationContext).let { store ->
         if (store.useInPrompt) FeedbackExamples.select(store.all()) else emptyList()
@@ -141,7 +159,10 @@ class CallProcessingWorker(context: Context, params: WorkerParameters) : Corouti
     /** 필수 설정이 빠졌으면 안내 알림을 띄우고 false. */
     private fun checkSetup(): Boolean {
         val missing = buildList {
-            if (settings.apiKey.isBlank()) add("Claude API 키")
+            when (settings.extractionEngine) {
+                ExtractionEngine.CLAUDE -> if (settings.apiKey.isBlank()) add("Claude API 키")
+                ExtractionEngine.LOCAL -> if (!LocalModels.isReady(applicationContext, settings.localModel)) add("기기 내 언어 모델 다운로드")
+            }
             if (!WhisperModel.isReady(applicationContext)) add("음성 인식 모델 다운로드")
             if (!hasPermission(Manifest.permission.WRITE_CALENDAR)) add("캘린더 권한")
             if (settings.calendarId < 0) add("등록할 캘린더 선택")

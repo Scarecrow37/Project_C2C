@@ -21,6 +21,8 @@ data class EventOrigin(
     val recordingName: String,
     /** 음성 인식 결과 (분석용, 길이 제한). 예전 기록에는 없을 수 있다. */
     val transcript: String?,
+    /** 추출한 엔진·모델 ([ScheduleExtractor.name]). 예전 기록에는 없다. */
+    val extractor: String? = null,
 ) {
     companion object {
         const val MAX_TRANSCRIPT_CHARS = 6_000
@@ -31,6 +33,7 @@ data class EventOrigin(
             context: CallContext,
             recordingName: String,
             transcript: String,
+            extractor: String? = null,
         ) = EventOrigin(
             extracted = EventDraft.from(event, event.notes.orEmpty()).copy(description = event.notes),
             confidence = event.confidence,
@@ -40,6 +43,7 @@ data class EventOrigin(
             callTime = context.callTime.toLocalDateTime(),
             recordingName = recordingName,
             transcript = transcript.trim().take(MAX_TRANSCRIPT_CHARS),
+            extractor = extractor,
         )
     }
 }

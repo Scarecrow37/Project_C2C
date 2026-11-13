@@ -44,6 +44,8 @@ class ClaudeScheduleExtractor(
         )
     }
 
+    override val name: String get() = model
+
     override fun extract(transcript: String, context: CallContext): ExtractionResult {
         if (transcript.isBlank()) return ExtractionResult.Success(emptyList(), "")
 

@@ -2,6 +2,9 @@ package com.c2c.app.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.c2c.app.model.ExtractionEngine
+import com.c2c.app.model.LocalModelSpec
+import com.c2c.app.model.LocalModels
 import com.c2c.core.ConfidenceThreshold
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +34,24 @@ class AppSettings(context: Context) {
     var apiKey: String
         get() = prefs.getString(KEY_API, "").orEmpty()
         set(v) = prefs.edit().putString(KEY_API, v.trim()).apply()
+
+    /** 일정 추출 엔진 (기본: Claude API). */
+    var extractionEngine: ExtractionEngine
+        get() = prefs.getString(KEY_ENGINE, null)
+            ?.let { n -> ExtractionEngine.entries.firstOrNull { it.name == n } } ?: ExtractionEngine.CLAUDE
+        set(v) = prefs.edit().putString(KEY_ENGINE, v.name).apply()
+
+    /** 기기 내 모델 선택 ([LocalModels.PRESETS]의 id, 또는 custom / imported). */
+    var localModelId: String
+        get() = prefs.getString(KEY_LOCAL_MODEL, LocalModels.DEFAULT_ID)!!
+        set(v) = prefs.edit().putString(KEY_LOCAL_MODEL, v).apply()
+
+    /** 직접 입력한 GGUF 다운로드 주소. */
+    var customModelUrl: String
+        get() = prefs.getString(KEY_CUSTOM_URL, "").orEmpty()
+        set(v) = prefs.edit().putString(KEY_CUSTOM_URL, v.trim()).apply()
+
+    val localModel: LocalModelSpec get() = LocalModels.spec(localModelId, customModelUrl)
 
     /** 일정을 등록할 캘린더 ID. 미선택이면 -1. */
     var calendarId: Long
@@ -102,6 +123,9 @@ class AppSettings(context: Context) {
 
     private companion object {
         const val KEY_API = "api_key"
+        const val KEY_ENGINE = "extraction_engine"
+        const val KEY_LOCAL_MODEL = "local_model"
+        const val KEY_CUSTOM_URL = "custom_model_url"
         const val KEY_CALENDAR = "calendar_id"
         const val KEY_AUTO = "auto_process"
         const val KEY_MIN_CONF = "min_confidence"

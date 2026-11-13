@@ -71,6 +71,7 @@ android {
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":llm"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
