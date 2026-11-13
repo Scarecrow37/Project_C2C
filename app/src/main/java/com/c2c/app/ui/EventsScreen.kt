@@ -1,31 +1,36 @@
 package com.c2c.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,14 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.c2c.core.EventFormat
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.time.LocalDateTime
-import java.util.Date
-import java.util.Locale
 
 /**
- * 통화에서 자동으로 만든 일정 목록. 수정·원클릭 삭제(되돌리기 가능)를 지원한다.
- * @param openEventId 알림에서 들어왔을 때 바로 수정 창을 열 일정
+ * 통화에서 자동으로 만든 일정 목록.
+ * - 항목을 누르면 상세 화면 (수정·삭제 버튼)
+ * - 항목을 오른쪽에서 왼쪽으로 밀면 삭제 (스낵바에서 되돌리기)
+ * @param openEventId 알림에서 들어왔을 때 바로 상세를 열 일정
  */
 @Composable
 fun EventsScreen(
@@ -53,7 +57,8 @@ fun EventsScreen(
 ) {
     val state by vm.state.collectAsState()
     val scope = rememberCoroutineScope()
-    var editing by remember { mutableStateOf<EventItem?>(null) }
+    var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var editing by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { vm.refresh() }
     LaunchedEffect(Unit) {
@@ -71,13 +76,43 @@ fun EventsScreen(
             }
         }
     }
-    // 알림에서 연 일정이 있으면 수정 창을 띄운다
-    LaunchedEffect(openEventId, state) {
-        val loaded = state as? EventsState.Loaded ?: return@LaunchedEffect
+    // 알림에서 연 일정이 있으면 상세 화면을 띄운다
+    LaunchedEffect(openEventId) {
         if (openEventId != null) {
-            editing = loaded.items.firstOrNull { it.id == openEventId }
+            selectedId = openEventId
+            editing = false
             onOpenEventConsumed()
         }
+    }
+
+    val loaded = state as? EventsState.Loaded
+    val selected = selectedId?.let { id -> loaded?.items?.firstOrNull { it.id == id } }
+    // 선택한 일정이 사라지면 (삭제됨) 목록으로 돌아간다
+    LaunchedEffect(loaded, selectedId) {
+        if (loaded != null && selectedId != null && selected == null) {
+            selectedId = null
+            editing = false
+        }
+    }
+
+    if (selected != null) {
+        EventDetailScreen(
+            item = selected,
+            onBack = { selectedId = null },
+            onEdit = { editing = true },
+            onDelete = {
+                selectedId = null
+                vm.delete(selected)
+            },
+        )
+        if (editing) {
+            EditEventDialog(
+                initial = selected.draft,
+                onDismiss = { editing = false },
+                onSave = { draft -> scope.launch { if (vm.save(selected, draft)) editing = false } },
+            )
+        }
+        return
     }
 
     when (val s = state) {
@@ -96,55 +131,82 @@ fun EventsScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                item {
+                    Text(
+                        "항목을 누르면 상세 정보를, 왼쪽으로 밀면 삭제합니다.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 if (upcoming.isNotEmpty()) {
                     item { SectionHeader("다가오는 일정 ${upcoming.size}") }
-                    items(upcoming, key = { it.id }) { EventCard(it, onEdit = { editing = it }, onDelete = { vm.delete(it) }) }
+                    items(upcoming, key = { it.id }) { item ->
+                        SwipeToDeleteCard(item, onClick = { selectedId = item.id }, onDelete = { vm.delete(item) })
+                    }
                 }
                 if (past.isNotEmpty()) {
                     item { SectionHeader("지난 일정 ${past.size}") }
-                    items(past.reversed(), key = { it.id }) { EventCard(it, onEdit = { editing = it }, onDelete = { vm.delete(it) }) }
+                    items(past.reversed(), key = { it.id }) { item ->
+                        SwipeToDeleteCard(item, onClick = { selectedId = item.id }, onDelete = { vm.delete(item) })
+                    }
                 }
             }
         }
     }
+}
 
-    editing?.let { item ->
-        EditEventDialog(
-            initial = item.draft,
-            onDismiss = { editing = null },
-            onSave = { draft -> scope.launch { if (vm.save(item, draft)) editing = null } },
-        )
+/** 오른쪽 → 왼쪽으로 밀면 삭제되는 카드. 왼쪽 → 오른쪽 스와이프는 막는다. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SwipeToDeleteCard(item: EventItem, onClick: () -> Unit, onDelete: () -> Unit) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onDelete()
+                true
+            } else {
+                false
+            }
+        },
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = true,
+        backgroundContent = {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 24.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                Text("삭제", color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.titleSmall)
+            }
+        },
+    ) {
+        EventCard(item, onClick)
     }
 }
 
 @Composable
-private fun EventCard(item: EventItem, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val created = remember(item.meta.createdAtMillis) {
-        SimpleDateFormat("M/d HH:mm", Locale.KOREAN).format(Date(item.meta.createdAtMillis))
-    }
-    Card(Modifier.fillMaxWidth().clickable(onClick = onEdit)) {
-        Column(Modifier.padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 4.dp)) {
-            Text(item.draft.title, style = MaterialTheme.typography.titleMedium)
+private fun EventCard(item: EventItem, onClick: () -> Unit) {
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(item.draft.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(EventFormat.range(item.draft), style = MaterialTheme.typography.bodyMedium)
-            item.draft.location?.let { Text("📍 $it", style = MaterialTheme.typography.bodyMedium) }
+            item.draft.location?.let {
+                Text("📍 $it", style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             Text(
-                "📞 ${item.meta.counterpart ?: "알 수 없음"} · $created 통화에서 추가",
+                "📞 ${item.meta.counterpart ?: "알 수 없음"}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (item.meta.evidence.isNotBlank()) {
-                Text(
-                    "\"${item.meta.evidence}\"",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onEdit) { Text("수정") }
-                TextButton(onClick = onDelete) { Text("삭제", color = MaterialTheme.colorScheme.error) }
-            }
         }
     }
 }
@@ -157,7 +219,9 @@ private fun SectionHeader(text: String) {
 @Composable
 private fun EmptyMessage(title: String, body: String, action: Pair<String, () -> Unit>? = null) {
     Column(
-        Modifier.fillMaxSize().padding(32.dp),
+        Modifier
+            .fillMaxSize()
+            .padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

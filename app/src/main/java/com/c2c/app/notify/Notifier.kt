@@ -34,7 +34,7 @@ class Notifier(private val context: Context) {
     fun eventAdded(eventId: Long, event: ScheduleEvent, counterpart: String?) {
         // 고정 ID(1~3)와 겹치지 않도록 1000 이상으로
         val notificationId = (eventId % 1_000_000).toInt() + 1000
-        // 알림을 누르면 앱의 "생성된 일정" 목록에서 해당 일정을 바로 수정할 수 있게 연다.
+        // 알림을 누르면 앱의 "생성된 일정" 탭에서 해당 일정의 상세 화면을 연다.
         val viewIntent = Intent(context, MainActivity::class.java)
             .putExtra(MainActivity.EXTRA_EVENT_ID, eventId)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)

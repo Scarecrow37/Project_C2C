@@ -19,8 +19,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,7 +55,13 @@ class EventsViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = CalendarRepository(app)
 
     private val _state = MutableStateFlow<EventsState>(EventsState.Loading)
-    val state: StateFlow<EventsState> = _state.asStateFlow()
+
+    /** 삭제 요청한 일정. 캘린더 삭제가 끝나기 전에 목록에서 먼저 뺀다 (스와이프가 자연스럽게 보이도록). */
+    private val pendingDelete = MutableStateFlow<Set<Long>>(emptySet())
+
+    val state: StateFlow<EventsState> = combine(_state, pendingDelete) { s, pending ->
+        if (s is EventsState.Loaded && pending.isNotEmpty()) EventsState.Loaded(s.items.filterNot { it.id in pending }) else s
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, EventsState.Loading)
 
     private val _messages = Channel<EventsMessage>(Channel.BUFFERED)
     val messages = _messages.receiveAsFlow()
@@ -86,12 +95,20 @@ class EventsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 원클릭 삭제. 스낵바의 "되돌리기"로 복구할 수 있다. */
-    fun delete(item: EventItem) = viewModelScope.launch {
-        val ok = withContext(Dispatchers.IO) {
-            runCatching { repo.delete(item.id).also { store.remove(item.id) } }.getOrDefault(false)
+    /** 일정 삭제. 스낵바의 "되돌리기"로 복구할 수 있다. 실패하면 목록에 다시 나타난다. */
+    fun delete(item: EventItem) {
+        pendingDelete.update { it + item.id }
+        viewModelScope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { repo.delete(item.id).also { if (it) store.remove(item.id) } }.getOrDefault(false)
+            }
+            if (ok) {
+                _messages.send(EventsMessage.Deleted(item))
+            } else {
+                pendingDelete.update { it - item.id }
+                _messages.send(EventsMessage.Text("삭제하지 못했습니다"))
+            }
         }
-        _messages.send(if (ok) EventsMessage.Deleted(item) else EventsMessage.Text("삭제하지 못했습니다"))
     }
 
     fun undoDelete(item: EventItem) = viewModelScope.launch {

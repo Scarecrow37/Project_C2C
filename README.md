@@ -28,11 +28,12 @@ Call ends
 
 The app's **"생성된 일정" (Created events)** tab collects every event created from calls.
 
-- **List**: upcoming and past events are shown separately. Each one shows its time, location, the other caller, and the quote it was based on.
-- **One-tap delete**: **Delete** removes the event from the calendar immediately. **Undo** on the snackbar restores it.
-- **Edit**: tap an event or **Edit** to change the title, all-day setting, start and end date and time, location, and notes. Moving the start time also moves the end time, so the event keeps its length.
+- **List**: upcoming and past events are shown separately. Each one shows its time, location and the other caller.
+- **Details**: tap an event to see its time, location and notes, plus the other caller, the quote it was based on, the recording file, and when it was added. The **Edit** and **Delete** buttons are at the bottom of this screen.
+- **Swipe to delete**: in the list, swipe an event from right to left to remove it from the calendar. **Undo** on the snackbar restores it.
+- **Edit**: change the title, all-day setting, start and end date and time, location, and notes. Moving the start time also moves the end time, so the event keeps its length.
 - **Calendar sync**: the device calendar holds the event details. Changes or deletions made in Google Calendar or Samsung Calendar show up in the list right away.
-- Tapping the "Event added" notification opens the app with that event's edit dialog.
+- Tapping the "Event added" notification opens the app on that event's details.
 
 ## Platform limits
 
@@ -61,7 +62,7 @@ app/    Android app (Kotlin, Jetpack Compose, WorkManager)
   data/       Settings, processing history, created-event list
   notify/     Notifications and the cancel action
   work/       Background pipeline
-  ui/         Created-events tab (list, edit, delete), settings tab
+  ui/         Created-events tab (list, details, edit, swipe to delete), settings tab
   src/main/cpp/  whisper.cpp JNI bridge
 ```
 
