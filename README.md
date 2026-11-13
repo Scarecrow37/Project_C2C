@@ -1,5 +1,7 @@
 # Project_C2C (Call to Calendar)
 
+**English** | [한국어](README.ko.md)
+
 An Android app that builds calendar events from call recordings and sends reminders.
 It reads each call recording, turns the conversation into text **on the device**, and **Claude** finds agreed appointments, which are added to the calendar automatically.
 
