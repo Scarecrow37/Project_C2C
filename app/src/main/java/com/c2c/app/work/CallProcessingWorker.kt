@@ -17,6 +17,7 @@ import com.anthropic.errors.PermissionDeniedException
 import com.anthropic.errors.RateLimitException
 import com.anthropic.errors.UnauthorizedException
 import com.c2c.app.data.AppSettings
+import com.c2c.app.data.FeedbackStore
 import com.c2c.app.data.HistoryEntry
 import com.c2c.app.notify.Notifier
 import com.c2c.app.recording.CallRecording
@@ -24,6 +25,8 @@ import com.c2c.app.recording.CallRecordingScanner
 import com.c2c.app.stt.WhisperModel
 import com.c2c.app.stt.WhisperTranscriber
 import com.c2c.core.ClaudeScheduleExtractor
+import com.c2c.core.CorrectionExamples
+import com.c2c.core.FeedbackExamples
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -78,7 +81,7 @@ class CallProcessingWorker(context: Context, params: WorkerParameters) : Corouti
             val processor = CallProcessor(
                 applicationContext,
                 transcriber,
-                ClaudeScheduleExtractor.create(settings.apiKey),
+                ClaudeScheduleExtractor.create(settings.apiKey, pastMistakes(), pastCorrections()),
                 settings,
             )
             for (rec in targets) {
@@ -109,6 +112,16 @@ class CallProcessingWorker(context: Context, params: WorkerParameters) : Corouti
             settings.scanSinceSeconds = maxOf(settings.scanSinceSeconds, targets.maxOf { it.dateAddedSeconds })
         }
         return Result.success()
+    }
+
+    /** 사용자가 잘못 등록됐다며 지운 최근 일정 (켜져 있을 때만). 같은 실수를 반복하지 않도록 프롬프트에 넣는다. */
+    private fun pastMistakes() = FeedbackStore(applicationContext).let { store ->
+        if (store.useInPrompt) FeedbackExamples.select(store.all()) else emptyList()
+    }
+
+    /** 사용자가 직접 고친 최근 일정 (켜져 있을 때만). 고친 값을 정답으로 참고하게 한다. */
+    private fun pastCorrections() = FeedbackStore(applicationContext).let { store ->
+        if (store.useInPrompt) CorrectionExamples.select(store.edits()) else emptyList()
     }
 
     private fun retryOrGiveUp(rec: CallRecording, e: Exception): Result {

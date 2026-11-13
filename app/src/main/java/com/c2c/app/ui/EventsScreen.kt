@@ -2,10 +2,13 @@ package com.c2c.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +16,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.c2c.core.DeletionReason
 import com.c2c.core.EventFormat
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -56,6 +62,7 @@ fun EventsScreen(
     vm: EventsViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
+    val reasonRequest by vm.reasonRequest.collectAsState()
     val scope = rememberCoroutineScope()
     var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
     var editing by rememberSaveable { mutableStateOf(false) }
@@ -71,7 +78,7 @@ fun EventsScreen(
                         actionLabel = "되돌리기",
                         duration = SnackbarDuration.Long,
                     )
-                    if (r == SnackbarResult.ActionPerformed) vm.undoDelete(msg.item)
+                    if (r == SnackbarResult.ActionPerformed) vm.undoDelete(msg.item, msg.feedbackId)
                 }
             }
         }
@@ -115,6 +122,20 @@ fun EventsScreen(
         return
     }
 
+    Column(Modifier.fillMaxSize()) {
+        reasonRequest?.let { req ->
+            DeletionReasonCard(
+                req,
+                onReason = { vm.setReason(req.feedbackId, it) },
+                onDismiss = vm::dismissReason,
+            )
+        }
+        Box(Modifier.weight(1f)) { EventList(state, vm, onGoToSettings, onSelect = { selectedId = it }) }
+    }
+}
+
+@Composable
+private fun EventList(state: EventsState, vm: EventsViewModel, onGoToSettings: () -> Unit, onSelect: (Long) -> Unit) {
     when (val s = state) {
         EventsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         EventsState.NoPermission -> EmptyMessage(
@@ -141,19 +162,64 @@ fun EventsScreen(
                 if (upcoming.isNotEmpty()) {
                     item { SectionHeader("다가오는 일정 ${upcoming.size}") }
                     items(upcoming, key = { it.id }) { item ->
-                        SwipeToDeleteCard(item, onClick = { selectedId = item.id }, onDelete = { vm.delete(item) })
+                        SwipeToDeleteCard(item, onClick = { onSelect(item.id) }, onDelete = { vm.delete(item) })
                     }
                 }
                 if (past.isNotEmpty()) {
                     item { SectionHeader("지난 일정 ${past.size}") }
                     items(past.reversed(), key = { it.id }) { item ->
-                        SwipeToDeleteCard(item, onClick = { selectedId = item.id }, onDelete = { vm.delete(item) })
+                        SwipeToDeleteCard(item, onClick = { onSelect(item.id) }, onDelete = { vm.delete(item) })
                     }
                 }
             }
         }
     }
 }
+
+/** 방금 삭제한 일정의 이유를 묻는 카드. 고르지 않아도 "잘못 등록됨"으로 기록된다. */
+@Composable
+private fun DeletionReasonCard(req: ReasonRequest, onReason: (DeletionReason) -> Unit, onDismiss: () -> Unit) {
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(Modifier.padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "'${req.title}'을(를) 왜 삭제했나요?",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onDismiss) { Text("닫기") }
+            }
+            Text(
+                "알려주시면 다음부터 비슷한 일정을 더 정확하게 등록합니다.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(
+                Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                REASON_CHOICES.forEach { reason ->
+                    OutlinedButton(onClick = { onReason(reason) }) { Text(reason.label) }
+                }
+            }
+        }
+    }
+}
+
+private val REASON_CHOICES = listOf(
+    DeletionReason.NOT_AN_EVENT,
+    DeletionReason.WRONG_TIME,
+    DeletionReason.WRONG_DETAILS,
+    DeletionReason.CANCELLED,
+    DeletionReason.DUPLICATE,
+    DeletionReason.OTHER,
+)
 
 /** 오른쪽 → 왼쪽으로 밀면 삭제되는 카드. 왼쪽 → 오른쪽 스와이프는 막는다. */
 @OptIn(ExperimentalMaterial3Api::class)
