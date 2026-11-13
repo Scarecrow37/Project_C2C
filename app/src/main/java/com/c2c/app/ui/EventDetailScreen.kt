@@ -60,6 +60,7 @@ fun EventDetailScreen(
             if (item.meta.evidence.isNotBlank()) DetailRow("근거가 된 말", "\"${item.meta.evidence}\"")
             if (item.meta.recordingName.isNotBlank()) DetailRow("녹음 파일", item.meta.recordingName)
             DetailRow("자동 등록", created)
+            item.meta.origin.extractor?.let { DetailRow("추출 엔진", extractorLabel(it)) }
         }
 
         Row(
@@ -85,3 +86,12 @@ private fun DetailRow(label: String, value: String) {
         Text(value, style = MaterialTheme.typography.bodyLarge)
     }
 }
+
+/** "claude-opus-5-5" → "Claude (claude-opus-5-5)", "local:qwen2.5-3b" → "기기 내 모델 (Qwen2.5 3B Instruct)" */
+private fun extractorLabel(name: String): String =
+    if (name.startsWith("local:")) {
+        val id = name.removePrefix("local:")
+        "기기 내 모델 (${com.c2c.app.model.LocalModels.PRESETS.firstOrNull { it.id == id }?.name ?: id})"
+    } else {
+        "Claude ($name)"
+    }

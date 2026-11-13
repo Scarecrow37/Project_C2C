@@ -42,4 +42,7 @@ sealed interface ExtractionResult {
 
 fun interface ScheduleExtractor {
     fun extract(transcript: String, context: CallContext): ExtractionResult
+
+    /** 어떤 엔진·모델로 추출했는지 (피드백 분석용). 예: "claude-opus-5-5", "local:qwen2.5-3b" */
+    val name: String get() = "unknown"
 }

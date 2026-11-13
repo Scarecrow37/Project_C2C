@@ -84,7 +84,7 @@ class CallProcessor(
                         CreatedEvent(
                             id,
                             System.currentTimeMillis(),
-                            EventOrigin.of(event, result.summary, callContext, displayName, transcript),
+                            EventOrigin.of(event, result.summary, callContext, displayName, transcript, extractor.name),
                         ),
                     )
                     feedback.incrementCreated()

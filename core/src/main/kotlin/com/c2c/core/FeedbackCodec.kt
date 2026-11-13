@@ -21,6 +21,7 @@ object FeedbackCodec {
         o.callTime?.let { put("callTime", it.toString()) }
         put("recording", o.recordingName)
         o.transcript?.let { put("transcript", it) }
+        o.extractor?.let { put("extractor", it) }
     }
 
     fun originFromJson(n: JsonNode): EventOrigin = EventOrigin(
@@ -32,6 +33,7 @@ object FeedbackCodec {
         callTime = n.text("callTime")?.let(::parseTime),
         recordingName = n.text("recording").orEmpty(),
         transcript = n.text("transcript"),
+        extractor = n.text("extractor"),
     )
 
     fun originToString(o: EventOrigin): String = mapper.writeValueAsString(originToJson(o))

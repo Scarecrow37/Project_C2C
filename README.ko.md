@@ -3,7 +3,7 @@
 [English](README.md) | **한국어**
 
 통화 녹음을 바탕으로 캘린더에 일정을 등록하고 알림을 보내는 Android 앱입니다.
-통화 녹음을 **기기 안에서** 텍스트로 바꾸고, **Claude**가 합의된 약속을 찾아 캘린더에 자동으로 등록합니다.
+통화 녹음을 **기기 안에서** 텍스트로 바꾸고, **Claude** 또는 **기기 내 무료 모델**(Qwen, HyperCLOVA X SEED 등)이 합의된 약속을 찾아 캘린더에 자동으로 등록합니다.
 
 ## 동작 방식
 
@@ -14,7 +14,7 @@
             └─ CallProcessingWorker
                  1. 오디오 디코딩 → 16kHz 모노 PCM        (AudioDecoder, MediaCodec)
                  2. 기기 내 음성 인식                     (whisper.cpp, 한국어)
-                 3. 일정 추출                             (Claude API, 구조화 출력)
+                 3. 일정 추출                             (Claude API 또는 기기 내 llama.cpp 모델)
                  4. 캘린더 등록 + 30분 전 알림            (CalendarContract)
                  5. "일정 추가됨" 알림 + [취소] 버튼
 ```
@@ -23,6 +23,36 @@
 - 합의된 약속만 등록합니다. "언제 한번 보자" 같은 막연한 말, 취소된 계획, 지난 일정은 건너뜁니다. 확신도가 기준값보다 낮은 일정도 건너뜁니다. 기준값은 **설정 → 6. 자동 등록 기준**에서 10%~100%(5% 단위, 기본 60%) 사이로 조절할 수 있습니다.
 - "내일", "다음 주 화요일 3시" 같은 상대적 표현은 녹음 파일명에서 읽은 통화 시각을 기준으로 실제 날짜로 바꿉니다.
 - 알림의 **취소** 버튼을 누르면 등록된 일정이 삭제됩니다.
+
+## 일정 추출 엔진: Claude API / 기기 내 무료 모델
+
+**설정 → 2. 일정 추출 엔진**에서 고릅니다.
+
+| | Claude API | 기기 내 무료 모델 |
+|---|---|---|
+| 비용 | API 사용료 | 무료 |
+| 인터넷 | 필요 | 필요 없음 (모델 다운로드 때만) |
+| 녹취록 전송 | Claude API로 전송 | 기기 밖으로 나가지 않음 |
+| 정확도 | 가장 높음 | 모델 크기에 따라 낮을 수 있음 |
+| 속도 | 수 초 | 통화 1건당 수십 초~몇 분 |
+
+기기 내 모델은 [llama.cpp](https://github.com/ggml-org/llama.cpp)로 GGUF 파일을 실행합니다. 기본 목록은 다음과 같습니다(Q4_K_M 양자화).
+
+| 모델 | 크기 | 권장 메모리 | 비고 |
+|---|---|---|---|
+| Qwen2.5 3B Instruct (기본) | 약 2.1GB | 6GB 이상 | Qwen 공식 GGUF |
+| Qwen2.5 1.5B Instruct | 약 1.1GB | 4GB 이상 | 가볍지만 정확도 낮음 |
+| HyperCLOVA X SEED 1.5B | 약 1.1GB | 4GB 이상 | 네이버 공식 GGUF가 없어 **커뮤니티 변환본** 주소. 받아지지 않으면 직접 변환한 파일을 가져오세요 |
+
+- **다른 모델 쓰기**: ".gguf 주소 직접 입력" 또는 **파일에서 가져오기**(기기에 있는 .gguf 파일 복사)를 고르면 됩니다. 파일이 GGUF인지 앞 4바이트로 확인합니다.
+- **작은 모델에 맞춘 처리**:
+  - GBNF 문법으로 출력을 정해진 JSON 형식에 맞게 강제합니다.
+  - 녹취록이 4,000자를 넘으면 앞 1/3과 뒤 2/3만 남깁니다. 약속은 대개 통화 끝에 확정되기 때문입니다.
+  - 피드백 예시는 최근 3건만 보냅니다.
+- **메모리**: 모델은 분석할 때만 메모리에 올리고 끝나면 바로 내립니다.
+- **오프라인**: 기기 내 모델을 고르면 자동 분석 작업이 인터넷 연결 없이도 실행됩니다.
+- **라이선스**: Qwen2.5와 HyperCLOVA X SEED는 각각 라이선스가 다릅니다. 앱과 함께 배포하기 전에 확인하세요.
+- 일정마다 어떤 엔진·모델로 추출했는지 기록해 상세 화면과 피드백 내보내기에 표시합니다.
 
 ## 생성된 일정 관리
 
@@ -75,6 +105,7 @@
 ```
 core/   순수 Kotlin/JVM 모듈: Android SDK 없이 빌드·테스트 가능
   ClaudeScheduleExtractor   Claude API 호출 (anthropic-java SDK, JSON 스키마 출력, 서버 측 fallback)
+  LocalLlmScheduleExtractor 기기 내 모델로 추출 (GBNF 문법, 녹취록 줄이기, JSON 꺼내기)
   ExtractionPrompt          시스템 프롬프트와 출력 스키마
   ExtractionParser          JSON → ScheduleEvent (검증·보정)
   EventFilter               확신도, 지난 일정, 중복 필터링
@@ -92,7 +123,10 @@ app/    Android 앱 (Kotlin, Jetpack Compose, WorkManager)
   notify/     알림과 취소 동작
   work/       백그라운드 처리 파이프라인
   ui/         생성된 일정 탭(목록·상세·수정·밀어서 삭제·삭제 이유), 설정 탭(피드백 기록 화면 포함)
+  model/      기기 내 모델 목록, 다운로드, 엔진 선택
   src/main/cpp/  whisper.cpp JNI 브리지
+
+llm/    Android 라이브러리: llama.cpp JNI 브리지 + LlamaEngine (GGUF 실행)
 ```
 
 ## 빌드
@@ -100,8 +134,8 @@ app/    Android 앱 (Kotlin, Jetpack Compose, WorkManager)
 필요 환경: Android Studio (또는 Android SDK 35 + NDK + CMake 3.22.1), JDK 17 이상.
 
 ```bash
-# 1. whisper.cpp 소스 받기 (1회)
-./scripts/fetch_whisper.sh
+# 1. whisper.cpp, llama.cpp 소스 받기 (1회)
+./scripts/fetch_native.sh
 
 # 2. 앱 빌드 (local.properties의 sdk.dir 또는 ANDROID_HOME 필요)
 ./gradlew :app:assembleDebug
@@ -118,7 +152,7 @@ Android SDK가 없으면 `:app`은 자동으로 빠지고 `:core`만 빌드됩�
 ## 처음 실행할 때
 
 1. **권한 허용**: 오디오 파일, 캘린더, 알림.
-2. **Claude API 키 입력**: console.anthropic.com에서 발급받으세요.
+2. **일정 추출 엔진 고르기**: Claude API를 쓰려면 console.anthropic.com에서 발급한 키를 입력하세요. 무료로 쓰려면 "기기 내 무료 모델"을 고르고 모델을 받으세요.
 3. **캘린더 선택**: 일정을 등록할 캘린더를 고릅니다.
 4. **음성 인식 모델 다운로드**: `ggml-small-q5_1.bin`, 약 190MB. Wi-Fi 연결을 권장합니다.
 5. **자동 처리 켜기**: 이 시점 이후에 녹음된 통화부터 처리합니다. 기존 녹음은 처리하지 않습니다.
@@ -128,13 +162,13 @@ Android SDK가 없으면 `:app`은 자동으로 빠지고 `:core`만 빌드됩�
 ## 설정과 설계상 선택
 
 - **자동 등록 기준 확신도**: Claude가 일정마다 매긴 확신도가 이 값 이상이어야 등록됩니다. 설정 화면의 슬라이더로 10%~100%를 5% 단위로 조절하며, 내부 값은 0.1~1.0(0.05 단위)으로 저장됩니다. 낮추면 애매한 약속까지 등록되고, 높이면 확실한 약속만 등록됩니다.
-- **모델**: `claude-opus-5-5`, effort `medium`. 서버 측 fallback(`fallbacks: "default"`)을 켜 두어, 안전 분류기가 요청을 거절하면 다른 모델이 자동으로 다시 시도합니다.
+- **Claude 모델**: `claude-opus-5-5`, effort `medium`. 서버 측 fallback(`fallbacks: "default"`)을 켜 두어, 안전 분류기가 요청을 거절하면 다른 모델이 자동으로 다시 시도합니다.
 - **음성 인식**: whisper.cpp `small` (q5_1 양자화). 한국어 정확도가 부족하면 `WhisperModel.FILE_NAME`을 `medium` 모델로 바꾸세요 (더 느리고 용량이 큽니다).
 - **긴 통화**: 기기 성능에 따라 텍스트 변환에 수십 초에서 몇 분이 걸립니다. 포그라운드 작업으로 실행됩니다.
 
 ## ⚠️ 보안 주의: API 키
 
-현재 앱은 Claude API를 **직접** 호출하며, 키는 기기의 앱 전용 저장소에 저장됩니다.
+Claude API를 고르면 앱은 Claude API를 **직접** 호출하며, 키는 기기의 앱 전용 저장소에 저장됩니다.
 개인용이나 프로토타입으로는 괜찮지만, **다른 사용자에게 앱을 배포한다면 앱에 API 키를 넣지 마세요.** Claude를 호출하는 백엔드 서버를 두고, 앱은 그 서버를 호출하도록 바꿔야 합니다.
 
 ## 다음 단계 (아이디어)

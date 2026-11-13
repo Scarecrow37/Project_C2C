@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 set(WHISPER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/whisper.cpp)
 if (NOT EXISTS ${WHISPER_DIR}/CMakeLists.txt)
-    message(FATAL_ERROR "whisper.cpp 소스가 없습니다. 프로젝트 루트에서 scripts/fetch_whisper.sh 를 실행하세요.")
+    message(FATAL_ERROR "whisper.cpp 소스가 없습니다. 프로젝트 루트에서 scripts/fetch_native.sh 를 실행하세요.")
 endif ()
 
 # whisper.cpp 를 정적 라이브러리로 함께 빌드한다.
@@ -18,3 +18,5 @@ add_subdirectory(${WHISPER_DIR} whisper-build)
 
 add_library(c2c_whisper SHARED whisper_jni.cpp)
 target_link_libraries(c2c_whisper PRIVATE whisper android log)
+# llama.cpp(c2c_llama)도 자체 ggml 을 정적으로 포함한다. 두 라이브러리의 ggml 심볼이 서로 섞이지 않도록 숨긴다.
+target_link_options(c2c_whisper PRIVATE "-Wl,--exclude-libs,ALL")

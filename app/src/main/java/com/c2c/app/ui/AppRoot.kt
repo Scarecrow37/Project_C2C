@@ -21,16 +21,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.c2c.app.data.AppSettings
+import com.c2c.app.model.ExtractionEngine
+import com.c2c.app.model.LocalModels
 
 private const val TAB_EVENTS = 0
 private const val TAB_SETTINGS = 1
 
-/** 탭 두 개: 생성된 일정 / 설정. 아직 API 키를 넣지 않았다면 설정 탭부터 보여준다. */
+/** 일정 추출 엔진이 아직 준비되지 않았는지 (Claude 키 없음 / 기기 내 모델 없음). */
+private fun needsSetup(context: android.content.Context): Boolean {
+    val settings = AppSettings(context)
+    return when (settings.extractionEngine) {
+        ExtractionEngine.CLAUDE -> settings.apiKey.isBlank()
+        ExtractionEngine.LOCAL -> !LocalModels.isReady(context, settings.localModel)
+    }
+}
+
+/** 탭 두 개: 생성된 일정 / 설정. 일정 추출 엔진이 준비되지 않았다면 설정 탭부터 보여준다. */
 @Composable
 fun AppRoot(openEventId: Long?, onOpenEventConsumed: () -> Unit) {
     val context = LocalContext.current
     var tab by rememberSaveable {
-        mutableIntStateOf(if (AppSettings(context).apiKey.isBlank()) TAB_SETTINGS else TAB_EVENTS)
+        mutableIntStateOf(if (needsSetup(context)) TAB_SETTINGS else TAB_EVENTS)
     }
     val snackbar = remember { SnackbarHostState() }
     var showFeedback by rememberSaveable { mutableStateOf(false) }

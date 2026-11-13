@@ -104,23 +104,8 @@ fun SettingsScreen(
                 }
             }
 
-            Section("2. Claude API 키") {
-                var key by remember { mutableStateOf("") }
-                Text(if (state.apiKeySaved) "✅ 저장됨" else "console.anthropic.com 에서 발급한 키를 입력하세요")
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text("sk-ant-...") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Button(onClick = { vm.saveApiKey(key); key = "" }, enabled = key.isNotBlank()) { Text("저장") }
-                Text(
-                    "키는 이 기기에만 저장되며, 통화 녹취록 텍스트가 Claude API로 전송됩니다. 음성 파일은 기기 밖으로 나가지 않습니다.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            Section("2. 일정 추출 엔진") {
+                EngineSection()
             }
 
             Section("3. 등록할 캘린더") {
