@@ -20,7 +20,7 @@ Call ends
 ```
 
 - **The audio file never leaves the device.** Only the transcript text is sent to the Claude API.
-- Only agreed appointments are added. Vague mentions ("let's meet sometime"), cancelled plans and past events are skipped. Events below the confidence threshold (default 0.6) are skipped too.
+- Only agreed appointments are added. Vague mentions ("let's meet sometime"), cancelled plans and past events are skipped. Events below the confidence threshold are skipped too. The threshold can be set from 10% to 100% (in 5% steps, default 60%) under **Settings → 6. Auto-add threshold**.
 - Relative dates such as "tomorrow" or "next Tuesday at 3" are resolved from the call time, which is read from the recording file name.
 - Tapping **Cancel** on the notification deletes the event that was added.
 
@@ -47,7 +47,7 @@ Deleting an auto-created event usually means it was created by mistake. The app 
   - Included: not an event, wrong date/time, wrong details, and deletions with no reason made in the app or from the notification.
   - Excluded: cancelled, duplicate, other, and deletions with no reason made in another calendar app (these may just be cleanup).
   - If the user fixed the time before deleting, the fixed time is included as well.
-- **Settings → 6. Improvement feedback**: shows the number of auto-created events, deletions and the mistake rate, with a switch to turn the feature off. **View feedback records** lets you change each record's reason or remove it.
+- **Settings → 7. Improvement feedback**: shows the number of auto-created events, deletions and the mistake rate, with a switch to turn the feature off. **View feedback records** lets you change each record's reason or remove it.
 - **Export as JSON**: an analysis file for tuning the prompt and confidence threshold (format `c2c-feedback/2`, with both deletion and edit records). It contains parts of call transcripts, so take care when sharing it.
 
 ### Edit records
@@ -58,7 +58,7 @@ When the user changes an auto-created event, the changed value is the right answ
 - **Compared fields**: title, date/time, all-day, location. Notes are not compared because the app fills in part of them, and leading or trailing spaces are ignored.
 - **One record per event**: editing again replaces the record with the latest values. Changing the event back to what was first extracted removes the record. Deleting the event folds the edit into the deletion record.
 - **Used in the next extraction**: up to 10 recent edit records with real changes are sent to Claude as "what was added → what the user changed it to." This lets it match how the user reads dates and times and how they write titles and locations.
-- **Settings → 6. Improvement feedback**: shows the number and rate of edits and the most-edited fields (for example, date/time 3, title 1). **View feedback records** lists edit records and lets you remove them.
+- **Settings → 7. Improvement feedback**: shows the number and rate of edits and the most-edited fields (for example, date/time 3, title 1). **View feedback records** lists edit records and lets you remove them.
 
 Records stay in the app's private storage on the device and are not sent to any server. Only the parts attached as examples to the next extraction request (quote, time, deletion reason, and the added and corrected values) go to the Claude API.
 
@@ -127,6 +127,7 @@ Use **"Test with a recording"** to run the whole flow on any audio file, even on
 
 ## Settings and design choices
 
+- **Auto-add confidence threshold**: an event is added only if the confidence Claude gives it is at or above this value. A slider in Settings sets it from 10% to 100% in 5% steps; it is stored as 0.1 to 1.0 in steps of 0.05. Lower values also add vaguer appointments; higher values add only clear ones.
 - **Model**: `claude-opus-5-5`, effort `medium`. Server-side fallback is on (`fallbacks: "default"`), so if a safety classifier declines a request, another model retries it automatically.
 - **Speech recognition**: whisper.cpp `small` (q5_1 quantized). If Korean accuracy is not good enough, change `WhisperModel.FILE_NAME` to a `medium` model (slower and larger).
 - **Long calls**: transcribing takes roughly from tens of seconds up to a few minutes, depending on the device. It runs as a foreground task.

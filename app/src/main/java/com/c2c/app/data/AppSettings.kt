@@ -2,7 +2,7 @@ package com.c2c.app.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.c2c.core.EventFilter
+import com.c2c.core.ConfidenceThreshold
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -41,9 +41,12 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(KEY_AUTO, false)
         set(v) = prefs.edit().putBoolean(KEY_AUTO, v).apply()
 
+    /** 자동 등록 기준 확신도 (0.1~1.0, 0.05 단위). 이 값 이상인 일정만 등록한다. */
     var minConfidence: Double
-        get() = prefs.getFloat(KEY_MIN_CONF, EventFilter.DEFAULT_MIN_CONFIDENCE.toFloat()).toDouble()
-        set(v) = prefs.edit().putFloat(KEY_MIN_CONF, v.toFloat()).apply()
+        get() = ConfidenceThreshold.snap(
+            prefs.getFloat(KEY_MIN_CONF, ConfidenceThreshold.DEFAULT.toFloat()).toDouble(),
+        )
+        set(v) = prefs.edit().putFloat(KEY_MIN_CONF, ConfidenceThreshold.snap(v).toFloat()).apply()
 
     /** 이 시각(초) 이후에 추가된 녹음만 처리한다. 처음 켤 때 "지금"으로 정해 과거 녹음 전체를 처리하지 않게 한다. */
     var scanSinceSeconds: Long
