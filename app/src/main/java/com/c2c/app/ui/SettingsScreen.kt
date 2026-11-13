@@ -26,6 +26,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import com.c2c.core.ConfidenceThreshold
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -170,7 +173,11 @@ fun SettingsScreen(
                 }
             }
 
-            Section("6. 개선 피드백") {
+            Section("6. 자동 등록 기준") {
+                ConfidenceSlider(value = state.minConfidence, onChange = vm::setMinConfidence)
+            }
+
+            Section("7. 개선 피드백") {
                 Text(
                     "자동 등록된 일정을 삭제하거나 고치면 기록됩니다. 이 기록을 참고해 다음 통화부터 같은 실수를 줄이고, 고친 방식을 따릅니다.",
                     style = MaterialTheme.typography.bodySmall,
@@ -205,6 +212,50 @@ private fun Section(title: String, content: @Composable () -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             content()
+        }
+    }
+}
+
+/**
+ * 자동 등록 기준 확신도 슬라이더. 화면에는 10%~100% (5% 단위), 내부 값은 0.1~1.0 (0.05 단위).
+ * 끄는 동안은 화면에만 반영하고, 손을 뗄 때 저장한다.
+ */
+@Composable
+private fun ConfidenceSlider(value: Double, onChange: (Double) -> Unit) {
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val shown = ConfidenceThreshold.snap((dragging ?: value.toFloat()).toDouble())
+    val percent = ConfidenceThreshold.toPercent(shown)
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("확신도 기준", Modifier.weight(1f))
+        Text("$percent%", style = MaterialTheme.typography.titleMedium)
+    }
+    Slider(
+        value = shown.toFloat(),
+        onValueChange = { dragging = it },
+        onValueChangeFinished = {
+            dragging?.let { onChange(ConfidenceThreshold.snap(it.toDouble())) }
+            dragging = null
+        },
+        valueRange = ConfidenceThreshold.MIN.toFloat()..ConfidenceThreshold.MAX.toFloat(),
+        steps = ConfidenceThreshold.SLIDER_STEPS,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Row {
+        Text("10%", style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        Text("100%", style = MaterialTheme.typography.bodySmall)
+    }
+    Text(
+        when {
+            percent <= 40 -> "낮음: 애매한 약속도 많이 등록됩니다. 잘못 등록되는 일정이 늘 수 있습니다."
+            percent >= 85 -> "높음: 확실히 합의된 약속만 등록합니다. 일부 약속은 놓칠 수 있습니다."
+            else -> "Claude가 판단한 확신도가 $percent% 이상인 일정만 자동으로 등록합니다."
+        },
+        style = MaterialTheme.typography.bodySmall,
+    )
+    if (percent != ConfidenceThreshold.toPercent(ConfidenceThreshold.DEFAULT)) {
+        TextButton(onClick = { onChange(ConfidenceThreshold.DEFAULT) }) {
+            Text("기본값(${ConfidenceThreshold.toPercent(ConfidenceThreshold.DEFAULT)}%)으로 되돌리기")
         }
     }
 }

@@ -15,6 +15,7 @@ import com.c2c.app.data.HistoryEntry
 import com.c2c.app.stt.WhisperModel
 import com.c2c.app.work.ModelDownloadWorker
 import com.c2c.app.work.WorkScheduler
+import com.c2c.core.ConfidenceThreshold
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,6 +30,8 @@ data class UiState(
     val apiKeySaved: Boolean = false,
     val calendarId: Long = -1,
     val autoEnabled: Boolean = false,
+    /** 자동 등록 기준 확신도 (0.1~1.0) */
+    val minConfidence: Double = ConfidenceThreshold.DEFAULT,
     val history: List<HistoryEntry> = emptyList(),
 )
 
@@ -49,6 +52,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             apiKeySaved = settings.apiKey.isNotBlank(),
             calendarId = settings.calendarId,
             autoEnabled = settings.autoProcessEnabled,
+            minConfidence = settings.minConfidence,
             history = settings.history(),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
@@ -82,6 +86,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveApiKey(key: String) {
         settings.apiKey = key
+    }
+
+    fun setMinConfidence(value: Double) {
+        settings.minConfidence = value
     }
 
     fun selectCalendar(id: Long) {
