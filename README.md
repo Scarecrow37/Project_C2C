@@ -2,6 +2,9 @@
 
 **English** | [한국어](README.ko.md)
 
+> ⚠️ **Discontinued (November 2026)**: this project is no longer developed or maintained. A better service that does the same job has been released, so the project was retired.
+> The code stays here for reference only. The Android app (`app` and `llm` modules) was never built or run on a real device.
+
 An Android app that builds calendar events from call recordings and sends reminders.
 It reads each call recording, turns the conversation into text **on the device**, and **Claude** or a **free on-device model** (Qwen, HyperCLOVA X SEED, and others) finds agreed appointments, which are added to the calendar automatically.
 
